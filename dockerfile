@@ -9,6 +9,10 @@ RUN go mod download
 
 # 2. Copiar el resto del código y compilar
 COPY . .
+
+ARG DB_HOST
+ARG DB_USER
+
 RUN go build -o main .
 
 # Exponer el puerto en el que la aplicación escucha

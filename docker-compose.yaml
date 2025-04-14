@@ -1,21 +1,47 @@
 services:
+  # Servicio para la aplicación en Go
   app:
-    build: .
-    container_name: my-go-app
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "5555:5555"
-    volumes:
-      - go-mod-cache:/go/pkg/mod  # Cache de módulos de Go
+      - "5000:5000"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=mydatabase
+      - DB_PORT=5432
+      - DB_TIMEZONE=America/Caracas
     networks:
-      - my-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Para acceder al host desde el contenedor
+      - mynetwork
 
-# Volumen para cachear módulos de Go
+  # Servicio para la base de datos PostgreSQL
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5633:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydatabase
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db_init:/docker-entrypoint-initdb.d # Aquí se montan los scripts SQL
+    networks:
+      - mynetwork
+
+# Volumen para persistir los datos de PostgreSQL
 volumes:
-  go-mod-cache:
+  postgres_data:
 
-# Red personalizada
+# Red para conectar los servicios
 networks:
-  my-network:
-    driver: bridge
+  mynetwork:
