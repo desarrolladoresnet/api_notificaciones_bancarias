@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    container_name: my-go-app
+    ports:
+      - "5555:5555"
+    volumes:
+      - go-mod-cache:/go/pkg/mod  # Cache de módulos de Go
+    networks:
+      - my-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Para acceder al host desde el contenedor
+
+# Volumen para cachear módulos de Go
+volumes:
+  go-mod-cache:
+
+# Red personalizada
+networks:
+  my-network:
+    driver: bridge
