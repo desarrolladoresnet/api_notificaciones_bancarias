@@ -2,6 +2,7 @@ package bdv
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,6 +15,7 @@ import (
 type bdvRequest struct {
 	BancoOrdenante string `json:"bancoOrdenante"`
 	Referencia     string `json:"referenciaBancoOrdenante"`
+	IdCliente      string `json:"idCliente"`
 	IdComercio     string `json:"numeroComercio"`
 	NumeroCliente  string `json:"numeroCliente"`
 	NumeroComercio string `json:"tranformRequestToModelroComercio"`
@@ -28,11 +30,70 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 
 		if err := c.ShouldBindJSON(&request); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   err.Error(),
-				"message": "error while parsing JSON data",
-				"success": false,
+				"codigo":         nil,
+				"mensajeCliente": "error while receiving JSON data",
+				"mensajeSistema": err.Error(),
+				"success":        false,
 			})
+			return
 		}
+
+		fmt.Println("--- Transformando ---")
+		model, err := tranformRequestToModel(request)
+		if err != nil {
+			log.Printf("Error while parsing the request body\n%v", err.Error())
+			c.JSON(http.StatusBadRequest, gin.H{
+				"codigo":         nil,
+				"mensajeCliente": "error while transforming JSON data",
+				"mensajeSistema": err.Error(),
+				"success":        false,
+			})
+			return
+		}
+
+		// ---- Buscar si ya se habia reportado la notificacion ----- //
+		// CheckNotificationExists arroja true si ya existe una entrada con los mismos datos
+		result, err := CheckNotificationExists(request.BancoOrdenante, request.Referencia, request.Fecha, request.IdCliente, db)
+		if err != nil {
+			log.Printf("Error while parsing the request body\n%v", err.Error())
+			c.JSON(http.StatusBadRequest, gin.H{
+				"codigo":         nil,
+				"mensajeCliente": "error while receiving JSON data",
+				"mensajeSistema": err.Error(),
+				"success":        false,
+			})
+			return
+		}
+		if result {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"codigo":         "01",
+				"mensajeCliente": "pago previamente recibido",
+				"mensajeSistema": "Notificado",
+				"success":        true,
+			})
+			return
+		}
+
+		// ---- Si no existe la notificacion se guarda en BD ----- //
+
+		result, err = saveNotification(model, db)
+		if err != nil || !result {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"codigo":         nil,
+				"mensajeCliente": "error saving the data",
+				"mensajeSistema": err.Error(),
+				"success":        false,
+			})
+			return
+		}
+
+		c.JSON(http.StatusBadRequest, gin.H{
+			"codigo":         "00",
+			"mensajeCliente": "Aprobado",
+			"mensajeSistema": "Notificado",
+			"success":        result,
+		})
+
 	}
 }
 
@@ -62,6 +123,7 @@ func tranformRequestToModel(request bdvRequest) (*models.NotificationBDV, error)
 	notificacion := models.NotificationBDV{
 		BancoOrigen:      request.BancoOrdenante,
 		ReferenciaOrigen: request.Referencia,
+		IdCliente:        request.IdCliente,
 		NumeroCliente:    request.NumeroCliente,
 		IdComercio:       request.NumeroComercio,
 		FechaBanco:       request.Fecha,
@@ -103,4 +165,54 @@ func TransformHour(timeStr string) (*time.Time, error) {
 	}
 
 	return nil, fmt.Errorf("formato de hora inválido, formatos aceptados: HH.MM, HH:MM, HHMM, HH MM")
+}
+
+/////////////////////////////////////////////////
+
+func saveNotification(model *models.NotificationBDV, db *gorm.DB) (bool, error) {
+	if model == nil {
+		return false, fmt.Errorf("notification model cannot be nil")
+	}
+
+	if db == nil {
+		return false, fmt.Errorf("database connection cannot be nil")
+	}
+
+	result := db.Create(model)
+	if result.Error != nil {
+		log.Printf("Error saving BDV notification: %v", result.Error)
+		return false, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		log.Println("No rows were affected when saving notification")
+		return false, fmt.Errorf("no rows affected")
+	}
+
+	return true, nil
+}
+
+/////////////////////////////////////////////////
+
+func CheckNotificationExists(bancoOrigen string, referenciaOrigen string, fechaBanco string,
+	id_cliente string, db *gorm.DB) (bool, error) {
+
+	if db == nil {
+		return false, fmt.Errorf("database connection cannot be nil")
+	}
+
+	var count int64
+
+	result := db.Model(&models.NotificationBDV{}).
+		Where("banco_origen = ? AND referencia_origen = ? AND fecha_banco = ? AND id_cliente = ?",
+			bancoOrigen, referenciaOrigen, fechaBanco, id_cliente).
+		Count(&count)
+
+	if result.Error != nil {
+		log.Printf("Error checking for existing BDV notification: %v", result.Error)
+		return false, result.Error
+	}
+
+	// Si count > 0, significa que ya existe al menos una notificación con esos datos
+	return count > 0, nil
 }
