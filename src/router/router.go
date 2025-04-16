@@ -10,5 +10,5 @@ func Router(api *gin.RouterGroup, db *gorm.DB) {
 	bdv_routes := api.Group("/bdv")
 
 	bdv_routes.POST("/webhook", bdv.WeebHookBDV(db))
-	bdv_routes.GET("/webhook", bdv.GetPayments(db))
+	bdv_routes.GET("/notificaciones", bdv.GetPayments(db))
 }

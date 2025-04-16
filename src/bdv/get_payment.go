@@ -1,7 +1,6 @@
 package bdv
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -25,180 +24,173 @@ func GetPayments(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request getNotificationsBdv
 		if err := c.ShouldBind(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			respondWithError(c, http.StatusBadRequest, "Invalid request format", err.Error())
 			return
 		}
 
-		// Verificar si hay parámetros para validar
-		hasParams := request.Referencia != "" || request.Fecha != "" ||
-			request.NumeroCliente != "" || request.IdCliente != ""
-
-		// Solo validar los parámetros si al menos uno fue proporcionado
-		if hasParams {
-			if valid, errors := checkParamsFields(request); !valid {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": errors})
-				return
-			}
+		// Validar parámetros (solo los que no están vacíos)
+		if valid, errors := validateRequestParams(request); !valid {
+			respondWithValidationError(c, errors)
+			return
 		}
 
-		// Establecer página por defecto si no se proporciona
-		if request.Pagina == "" {
-			request.Pagina = "1"
-		}
+		// Configurar paginación por defecto
+		page, pageSize := configurePagination(request.Pagina)
 
-		// Buscar en BD con los parámetros proporcionados
-		notifications, totalCount, err := SearchNotifications(request, db)
+		// Buscar notificaciones
+		notifications, totalCount, err := searchWithFilters(db, request, page, pageSize)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al buscar notificaciones"})
 			log.Printf("Error searching notifications: %v", err)
+			respondWithError(c, http.StatusInternalServerError, "Database error", err.Error())
 			return
 		}
 
-		// Determinar la página actual
-		page := 1
-		if pageNum, err := strconv.Atoi(request.Pagina); err == nil && pageNum > 0 {
-			page = pageNum
-		}
+		// Calcular total de páginas
+		totalPages := calculateTotalPages(totalCount, pageSize)
 
-		// Calcular el total de páginas
-		totalPages := (totalCount + 99) / 100 // Redondeo hacia arriba
-
-		// Responder con los resultados y la información de paginación
+		// Responder con éxito
 		c.JSON(http.StatusOK, gin.H{
-			"data": notifications,
+			"success": true,
+			"message": "Notifications retrieved successfully",
+			"data":    notifications,
 			"pagination": gin.H{
 				"current_page": page,
 				"total_pages":  totalPages,
 				"total_items":  totalCount,
-				"page_size":    100,
+				"page_size":    pageSize,
 			},
 		})
 	}
 }
 
-/////////////////////////////////////////////////
-/////////////////////////////////////////////////
-/////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
 
-func checkParamsFields(request getNotificationsBdv) (bool, []string) {
-	var errorsList []string
-	var isValid = true
+// validateRequestParams valida solo los campos no vacíos
+func validateRequestParams(request getNotificationsBdv) (bool, []string) {
+	var errors []string
 
-	// Validar Referencia (solo números)
-	if _, err := strconv.Atoi(request.Referencia); err != nil {
-		isValid = false
-		errorsList = append(errorsList, "La referencia solo puede contener números")
-	}
-
-	if _, err := strconv.Atoi(request.Pagina); err != nil {
-		isValid = false
-		errorsList = append(errorsList, "La pagina solo puede contener números")
-	}
-
-	// Validar Fecha (formato YYYY-MM-DD)
-	if _, err := time.Parse("2006-01-02", request.Fecha); err != nil {
-		isValid = false
-		errorsList = append(errorsList, "La fecha debe estar en formato YYYY-MM-DD (ej: 2023-01-01)")
-	}
-
-	// Validar Número de Cliente (teléfono venezolano)
-	phoneRegex := regexp.MustCompile(`^(0)?(412|414|416|418|424|426|416|424)[0-9]{7}$`)
-	if !phoneRegex.MatchString(request.NumeroCliente) {
-		isValid = false
-		errorsList = append(errorsList, "El número de cliente debe ser un teléfono válido para Venezuela (ej: 04141234567 o 4123456789)")
-	}
-
-	// Validar ID Cliente (documento venezolano)
-	idRegex := regexp.MustCompile(`^[VGJEPvgjep][0-9]{5,9}$`)
-	if !idRegex.MatchString(request.IdCliente) {
-		isValid = false
-		errorsList = append(errorsList, "El ID de cliente debe ser un documento válido de Venezuela (debe comenzar con V, G, J, E o P)")
-	}
-
-	return isValid, errorsList
-}
-
-/////////////////////////////////////////////////
-
-func SearchNotifications(request getNotificationsBdv, db *gorm.DB) ([]models.NotificationBDV, int64, error) {
-	if db == nil {
-		return nil, 0, fmt.Errorf("database connection cannot be nil")
-	}
-
-	// Inicializar la consulta base
-	query := db.Model(&models.NotificationBDV{})
-
-	// Aplicar filtros solo si los parámetros no están vacíos
 	if request.Referencia != "" {
-		query = query.Where("referencia_origen = ?", request.Referencia)
+		if _, err := strconv.Atoi(request.Referencia); err != nil {
+			errors = append(errors, "La referencia debe contener solo números")
+		}
+	}
+
+	if request.Pagina != "" {
+		if _, err := strconv.Atoi(request.Pagina); err != nil {
+			errors = append(errors, "La página debe ser un número válido")
+		}
 	}
 
 	if request.Fecha != "" {
-		query = query.Where("fecha_banco = ?", request.Fecha)
+		if _, err := time.Parse("2006-01-02", request.Fecha); err != nil {
+			errors = append(errors, "La fecha debe estar en formato YYYY-MM-DD")
+		}
 	}
 
 	if request.NumeroCliente != "" {
-		query = query.Where("numero_cliente = ?", request.NumeroCliente)
+		if !isValidVenezuelanPhone(request.NumeroCliente) {
+			errors = append(errors, "Número de teléfono venezolano inválido")
+		}
 	}
 
+	if request.IdCliente != "" {
+		if !isValidVenezuelanID(request.IdCliente) {
+			errors = append(errors, "ID de cliente inválido (debe comenzar con V, G, J, E o P)")
+		}
+	}
+
+	return len(errors) == 0, errors
+}
+
+//////////////////////////////////////////////////////////
+
+// searchWithFilters construye la consulta con los filtros proporcionados
+func searchWithFilters(db *gorm.DB, request getNotificationsBdv, page, pageSize int) ([]models.NotificationBDV, int64, error) {
+	query := db.Model(&models.NotificationBDV{})
+
+	if request.Referencia != "" {
+		query = query.Where("referencia_origen = ?", request.Referencia)
+	}
+	if request.Fecha != "" {
+		query = query.Where("fecha_banco = ?", request.Fecha)
+	}
+	if request.NumeroCliente != "" {
+		query = query.Where("numero_cliente = ?", request.NumeroCliente)
+	}
 	if request.IdCliente != "" {
 		query = query.Where("id_cliente = ?", request.IdCliente)
 	}
 
-	// Contar el total de registros que coinciden con los filtros
 	var totalCount int64
 	if err := query.Count(&totalCount).Error; err != nil {
-		log.Printf("Error counting matching notifications: %v", err)
 		return nil, 0, err
 	}
 
-	// Configurar paginación
-	const pageSize = 100
-	page := 1
+	var notifications []models.NotificationBDV
+	offset := (page - 1) * pageSize
+	err := query.Offset(offset).Limit(pageSize).Find(&notifications).Error
 
-	// Convertir página a entero si no está vacía
-	if request.Pagina != "" {
-		if pageNum, err := strconv.Atoi(request.Pagina); err == nil && pageNum > 0 {
-			page = pageNum
+	return notifications, totalCount, err
+}
+
+//////////////////////////////////////////////////////////
+
+// Funciones auxiliares
+func isValidVenezuelanPhone(phone string) bool {
+	regex := regexp.MustCompile(`^(0)?(412|414|416|418|424|426)[0-9]{7}$`)
+	return regex.MatchString(phone)
+}
+
+//////////////////////////////////////////////////////////
+
+func isValidVenezuelanID(id string) bool {
+	regex := regexp.MustCompile(`^[VGJEPvgjep][0-9]{5,9}$`)
+	return regex.MatchString(id)
+}
+
+//////////////////////////////////////////////////////////
+
+func configurePagination(pageStr string) (int, int) {
+	const defaultPage = 1
+	const defaultPageSize = 100
+
+	page := defaultPage
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
 		}
 	}
 
-	// Calcular offset para la paginación
-	offset := (page - 1) * pageSize
-
-	// Obtener resultados paginados
-	var notifications []models.NotificationBDV
-	if err := query.Offset(offset).Limit(pageSize).Find(&notifications).Error; err != nil {
-		log.Printf("Error fetching notifications: %v", err)
-		return nil, 0, err
-	}
-
-	return notifications, totalCount, nil
+	return page, defaultPageSize
 }
 
-/////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
 
-func GetNotificationExists(bancoOrigen string, referenciaOrigen string, fechaBanco string,
-	id_cliente string, db *gorm.DB) (bool, error) {
-
-	if db == nil {
-		return false, fmt.Errorf("database connection cannot be nil")
+func calculateTotalPages(totalCount int64, pageSize int) int {
+	if totalCount == 0 {
+		return 1
 	}
-
-	var count int64
-
-	result := db.Model(&models.NotificationBDV{}).
-		Where("banco_origen = ? AND referencia_origen = ? AND fecha_banco = ? AND id_cliente = ?",
-			bancoOrigen, referenciaOrigen, fechaBanco, id_cliente).
-		Count(&count)
-
-	if result.Error != nil {
-		log.Printf("Error checking for existing BDV notification: %v", result.Error)
-		return false, result.Error
-	}
-
-	// Si count > 0, significa que ya existe al menos una notificación con esos datos
-	return count > 0, nil
+	return int((totalCount + int64(pageSize) - 1) / int64(pageSize))
 }
 
-/////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+
+func respondWithError(c *gin.Context, status int, message, detail string) {
+	c.JSON(status, gin.H{
+		"success": false,
+		"message": message,
+		"error":   detail,
+	})
+}
+
+//////////////////////////////////////////////////////////
+
+func respondWithValidationError(c *gin.Context, errors []string) {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"success": false,
+		"message": "Validation failed",
+		"errors":  errors,
+	})
+}
