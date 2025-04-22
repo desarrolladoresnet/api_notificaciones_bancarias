@@ -33,7 +33,7 @@ func main() {
 			"message": "api notificaciones UP!",
 		})
 	})
-	api := r.Group("api/v1")
+	api := r.Group("api-notificaciones/v1")
 	router_module.Router(api, database)
 
 	log.Println("Starting server on :5000...")

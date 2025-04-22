@@ -78,20 +78,23 @@ func Database() (*gorm.DB, error) {
 }
 
 func AutoMigrateDB(db *gorm.DB) error {
-	//* ELIMINAR TABLAS *//
-	log.Println("Eliminando tabla intermedia si existe")
-	err := db.Migrator().DropTable("notificacion_bdv")
-	if err != nil {
-		log.Fatalf("Error eliminando la tabla user_clients: %v", err)
+	log.Println("Eliminando tablas si existen...")
+
+	tablesToDrop := []string{"notificacion_bdv", "api_key"}
+	for _, table := range tablesToDrop {
+		if err := db.Migrator().DropTable(table); err != nil {
+			log.Printf("Error eliminando la tabla %s: %v", table, err)
+			// No usamos log.Fatalf para evitar que termine el programa abruptamente
+			return fmt.Errorf("error eliminando tabla %s: %w", table, err)
+		}
 	}
 
-	//* MIGRAR TABLAS *//
+	log.Println("Iniciando migración de tablas...")
 
-	err = db.AutoMigrate(&models.NotificationBDV{})
-	if err != nil {
+	if err := db.AutoMigrate(&models.NotificationBDV{}, &models.APIKey{}); err != nil {
 		return fmt.Errorf("error al migrar las tablas: %w", err)
 	}
 
-	log.Println("Migraciones completadas")
+	log.Println("✅ Migraciones completadas con éxito")
 	return nil
 }
