@@ -87,7 +87,7 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"codigo":         "00",
 			"mensajeCliente": "Aprobado",
 			"mensajeSistema": "Notificado",
