@@ -2,6 +2,7 @@ package router_module
 
 import (
 	"github.com/desarrolladoresnet/api_notificaciones_bancarias/src/api_key"
+	"github.com/desarrolladoresnet/api_notificaciones_bancarias/src/bancaribe"
 	"github.com/desarrolladoresnet/api_notificaciones_bancarias/src/bdv"
 	"github.com/desarrolladoresnet/api_notificaciones_bancarias/src/middleware"
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,13 @@ func Router(api *gin.RouterGroup, db *gorm.DB) {
 	{
 		bdv_routes.POST("/webhook", bdv.WeebHookBDV(db))
 		bdv_routes.GET("/notificaciones", bdv.GetPayments(db))
+	}
+
+	bancaribe_routes := api.Group("/bancaribe")
+	bdv_routes.Use(middleware.APIKeyAuthMiddlewareBancaribe(db))
+	{
+		bancaribe_routes.POST("/webhook", bancaribe.WeebHookBancaribe(db))
+		bancaribe_routes.GET("/notificaciones", bdv.GetPayments(db))
 	}
 
 	// ---- API KEY ROUTES ---- //
