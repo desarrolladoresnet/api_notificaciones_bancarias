@@ -107,8 +107,8 @@ func validateRequestParams(request getNotificationsBancaribe) (bool, []string) {
 //////////////////////////////////////////////////////////
 
 // searchWithFilters construye la consulta con los filtros proporcionados
-func searchWithFilters(db *gorm.DB, request getNotificationsBancaribe, page, pageSize int) ([]models.NotificationBDV, int64, error) {
-	query := db.Model(&models.NotificationBDV{})
+func searchWithFilters(db *gorm.DB, request getNotificationsBancaribe, page, pageSize int) ([]models.NotificationBancaribe, int64, error) {
+	query := db.Model(&models.NotificationBancaribe{})
 
 	if request.Referencia != "" {
 		query = query.Where("origin_bank_reference = ?", request.Referencia)
@@ -128,7 +128,7 @@ func searchWithFilters(db *gorm.DB, request getNotificationsBancaribe, page, pag
 		return nil, 0, err
 	}
 
-	var notifications []models.NotificationBDV
+	var notifications []models.NotificationBancaribe
 	offset := (page - 1) * pageSize
 	err := query.Offset(offset).Limit(pageSize).Find(&notifications).Error
 

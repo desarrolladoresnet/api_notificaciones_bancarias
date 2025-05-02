@@ -23,7 +23,7 @@ func Router(api *gin.RouterGroup, db *gorm.DB) {
 	bdv_routes.Use(middleware.APIKeyAuthMiddlewareBancaribe(db))
 	{
 		bancaribe_routes.POST("/webhook", bancaribe.WeebHookBancaribe(db))
-		bancaribe_routes.GET("/notificaciones", bdv.GetPayments(db))
+		bancaribe_routes.GET("/notificaciones", bancaribe.GetPayments(db))
 	}
 
 	// ---- API KEY ROUTES ---- //
