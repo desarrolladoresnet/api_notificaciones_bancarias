@@ -16,9 +16,9 @@ type bdvRequest struct {
 	BancoOrdenante string `json:"bancoOrdenante"`
 	Referencia     string `json:"referenciaBancoOrdenante"`
 	IdCliente      string `json:"idCliente"`
-	IdComercio     string `json:"numeroComercio"`
+	IdComercio     string `json:"idComercion"`
 	NumeroCliente  string `json:"numeroCliente"`
-	NumeroComercio string `json:"tranformRequestToModelroComercio"`
+	NumeroComercio string `json:"numeroComercio"`
 	Fecha          string `json:"fecha"`
 	Hora           string `json:"hora"`
 	Monto          string `json:"monto"`
@@ -32,6 +32,16 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"mensajeCliente": "error while receiving JSON data",
+				"mensajeSistema": err.Error(),
+				"success":        false,
+			})
+			return
+		}
+
+		if err := request.Validate(); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"codigo":         nil,
+				"mensajeCliente": "validation error",
 				"mensajeSistema": err.Error(),
 				"success":        false,
 			})
@@ -215,4 +225,38 @@ func CheckNotificationExists(bancoOrigen string, referenciaOrigen string, fechaB
 
 	// Si count > 0, significa que ya existe al menos una notificación con esos datos
 	return count > 0, nil
+}
+
+/////////////////////////////////////////////////
+
+// Validate verifica que ningún campo esté vacío.
+func (r *bdvRequest) Validate() error {
+	if r.BancoOrdenante == "" {
+		return fmt.Errorf("bancoOrdenante es obligatorio")
+	}
+	if r.Referencia == "" {
+		return fmt.Errorf("referenciaBancoOrdenante es obligatorio")
+	}
+	if r.IdCliente == "" {
+		return fmt.Errorf("idCliente es obligatorio")
+	}
+	if r.IdComercio == "" {
+		return fmt.Errorf("idComercio es obligatorio")
+	}
+	if r.NumeroCliente == "" {
+		return fmt.Errorf("numeroCliente es obligatorio")
+	}
+	if r.NumeroComercio == "" {
+		return fmt.Errorf("numeroComercio es obligatorio")
+	}
+	if r.Fecha == "" {
+		return fmt.Errorf("fecha es obligatorio")
+	}
+	if r.Hora == "" {
+		return fmt.Errorf("hora es obligatorio")
+	}
+	if r.Monto == "" {
+		return fmt.Errorf("monto es obligatorio")
+	}
+	return nil // Todos los campos están correctos
 }

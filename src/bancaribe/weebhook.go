@@ -34,8 +34,20 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 		if err := c.ShouldBind(&request); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
-				"mensajeCliente": "error while receiving JSON data",
-				"mensajeSistema": err.Error(),
+				"message":        "error while receiving JSON data",
+				"messageSystem,": err.Error(),
+				"statusCode":     http.StatusBadRequest,
+				"success":        false,
+			})
+			return
+		}
+
+		if err := request.Validate(); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"codigo":         nil,
+				"message":        "validation error",
+				"messageSystem,": err.Error(),
+				"statusCode":     http.StatusBadRequest,
 				"success":        false,
 			})
 			return
@@ -45,8 +57,9 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
-				"mensajeCliente": "erro transforming to model",
-				"mensajeSistema": err.Error(),
+				"message":        "erro transforming to model",
+				"messageSystem,": err.Error(),
+				"statusCode":     http.StatusBadRequest,
 				"success":        false,
 			})
 			return
@@ -57,17 +70,20 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
-				"mensajeCliente": "erro while checking the DB",
-				"mensajeSistema": err.Error(),
+				"message":        "erro while checking the DB",
+				"messageSystem,": err.Error(),
+				"statusCode":     http.StatusBadRequest,
 				"success":        false,
 			})
 			return
 		}
 		if exist {
 			c.JSON(http.StatusOK, gin.H{
-				"mensajeCliente": "pago previamente recibido",
-				"mensajeSistema": "Notificado",
+				"codigo":         "01",
+				"message":        "pago previamente recibido",
+				"messageSystem,": "Notificado",
 				"success":        true,
+				"statusCode":     http.StatusOK,
 			})
 			return
 		}
@@ -77,28 +93,31 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
-				"mensajeCliente": "erro while saving data in the DB",
-				"mensajeSistema": err.Error(),
+				"message":        "erro while saving data in the DB",
+				"messageSystem,": err.Error(),
 				"success":        false,
+				"statusCode":     http.StatusBadRequest,
 			})
 			return
 		}
 		if !result { // ALREADY EXIST
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
-				"mensajeCliente": "can't save the data in the DB",
-				"mensajeSistema": nil,
+				"message":        "can't save the data in the DB",
+				"messageSystem,": nil,
 				"success":        false,
+				"statusCode":     http.StatusBadRequest,
 			})
 
 		}
 
 		c.JSON(http.StatusCreated, gin.H{
 			"codigo":         "00",
-			"mensajeCliente": "Aprobado",
-			"mensajeSistema": "Notificado",
+			"message":        "Success",
+			"messageSystem,": "Notificado",
 			"success":        true,
 			"data":           model,
+			"statusCode":     http.StatusOK,
 		})
 
 	}
@@ -246,4 +265,51 @@ func saveNotification(model *models.NotificationBancaribe, db *gorm.DB) (bool, e
 	}
 
 	return true, nil
+}
+
+//////////////////////////////////////////////////.
+//////////////////////////////////////////////////.
+//////////////////////////////////////////////////.
+
+func (n *notificationBancaribe) Validate() error {
+	if n.Amount == 0 {
+		return fmt.Errorf("amount no puede ser cero")
+	}
+	if n.BankName == "" {
+		return fmt.Errorf("bankName es obligatorio")
+	}
+	if n.ClientPhone == "" {
+		return fmt.Errorf("clientPhone es obligatorio")
+	}
+	if n.CommercePhone == "" {
+		return fmt.Errorf("commercePhone es obligatorio")
+	}
+	if n.CreditorAccount == "" {
+		return fmt.Errorf("creditorAccount es obligatorio")
+	}
+	if n.CurrencyCode == "" {
+		return fmt.Errorf("currencyCode es obligatorio")
+	}
+	if n.Date == "" {
+		return fmt.Errorf("date es obligatorio")
+	}
+	if n.DebtorID == "" {
+		return fmt.Errorf("debtorID es obligatorio")
+	}
+	if n.DestinyBankReference == "" {
+		return fmt.Errorf("destinyBankReference es obligatorio")
+	}
+	if n.OriginBankCode == "" {
+		return fmt.Errorf("originBankCode es obligatorio")
+	}
+	if n.OriginBankReference == "" {
+		return fmt.Errorf("originBankReference es obligatorio")
+	}
+	if n.PaymentType == "" {
+		return fmt.Errorf("paymentType es obligatorio")
+	}
+	if n.Time == "" {
+		return fmt.Errorf("time es obligatorio")
+	}
+	return nil // Todos los campos están correctos
 }
