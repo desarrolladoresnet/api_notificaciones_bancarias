@@ -5,6 +5,7 @@ import (
 )
 
 type NotificationBDV struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
 	BancoOrigen      string    `gorm:"column:banco_origen;size:4" json:"banco_origen"`                // banco del cliente
 	ReferenciaOrigen string    `gorm:"column:referencia_origen;size:15" json:"referencia_origen"`     // referencia del banco del cliente
 	IdCliente        string    `gorm:"column:id_cliente;size:15" json:"id_cliente"`                   // CI/Rif cliente
