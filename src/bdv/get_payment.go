@@ -111,7 +111,7 @@ func searchWithFilters(db *gorm.DB, request getNotificationsBdv, page, pageSize 
 	query := db.Model(&models.NotificationBDV{})
 
 	if request.Referencia != "" {
-		query = query.Where("referencia_origen = ?", request.Referencia)
+		query = query.Where("referencia_origen LIKE ?", request.Referencia)
 	}
 	if request.Fecha != "" {
 		query = query.Where("fecha_banco = ?", request.Fecha)
@@ -120,7 +120,7 @@ func searchWithFilters(db *gorm.DB, request getNotificationsBdv, page, pageSize 
 		query = query.Where("numero_cliente = ?", request.NumeroCliente)
 	}
 	if request.IdCliente != "" {
-		query = query.Where("id_cliente = ?", request.IdCliente)
+		query = query.Where("id_cliente LIKE ?", request.IdCliente)
 	}
 
 	var totalCount int64

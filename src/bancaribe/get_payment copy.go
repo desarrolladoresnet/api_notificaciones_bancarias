@@ -111,7 +111,7 @@ func searchWithFilters(db *gorm.DB, request getNotificationsBancaribe, page, pag
 	query := db.Model(&models.NotificationBancaribe{})
 
 	if request.Referencia != "" {
-		query = query.Where("origin_bank_reference = ?", request.Referencia)
+		query = query.Where("origin_bank_reference LIKE ?", request.Referencia)
 	}
 	if request.Fecha != "" {
 		query = query.Where("date_bancaribe = ?", request.Fecha)
@@ -120,7 +120,7 @@ func searchWithFilters(db *gorm.DB, request getNotificationsBancaribe, page, pag
 		query = query.Where("client_phone = ?", request.TelefonoCliente)
 	}
 	if request.IdCliente != "" {
-		query = query.Where("debtor_id = ?", request.IdCliente)
+		query = query.Where("debtor_id LIKE ?", request.IdCliente)
 	}
 
 	var totalCount int64
