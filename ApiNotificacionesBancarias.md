@@ -28,6 +28,8 @@
     ```
     
 
+---
+
 ## BDV
 
 - **Weebhook BDV**
@@ -147,6 +149,8 @@
     
     El campo **data** siempre es una lista/arreglo/slice de los datos obtenidos, se corresponden con el modelo **NotificationBDV**, **current_page** la pagina actual de los datos, **page_size** el tamaño de la pagina, **total_items** la cantidad de items encontrado en la pagina actual y **total_pages** la cantidad de paginas calculadas según el tamaño de las paginas.
     
+
+---
 
 ## Bancaribe
 
@@ -298,9 +302,13 @@
     ```
     
 
+---
+
 ## Tesoro
 
 En construcción
+
+---
 
 # Models
 
@@ -311,6 +319,8 @@ Los campos en la BD se tratan de mantener con los mismos nombres con los que son
 Tanto en las columnas de la BD como en el JSON de retorno de la información se mantienen en snake_case, siendo este la convención de Go (mas no de obligatoriedad).
 
 Ha diferencia de otros sistema, aquí los ID si los mantenemos como números enteros dado que no esperamos tener distintas instancias de la misma API, además Go y Postgres deberían ser suficientemente rápidos al momento de recibir los datos y realizar las escrituras pertinentes.
+
+---
 
 ## BDV
 
@@ -346,6 +356,8 @@ type NotificationBDV struct {
 - **HoraBanco:** hora en string tal cual la entrega el Banco.
 - **HoraTransformada:** hora llevado a objeto time tal cual la entrega el banco.
 - **Monto:** valor del pago como punto flotante.
+
+---
 
 ## Bancaribe
 
@@ -391,8 +403,267 @@ type NotificationBancaribe struct {
 - **TimeBancaribe:** hora del pago en formato string.
 - **Time:** hora del pago en formato Time.
 
+---
+
 ## Tesoro
 
 En construcción  🏗️
 
+---
+
 # Handlers
+
+Son la funciones que manejan las peticiones recibidas a la API.
+
+### BDV
+
+### weebhook.go 🗃️
+
+- **Función:** WeebHookBDV (Función Principal)
+    
+    **PROPOSITO**:
+    
+    Recibir los datos enviados desde BDV y retornar la respuesta esperada.
+    
+    **PROCESO:**
+    
+    1. Se recibe la notificación ⇒ Biding a un struct **bdvRequest:**
+        1. Si ok, continua
+        2. Not ok, retorna un 400 con success FALSE
+    2. Valida que los campos no lleguen vacíos usando la función **Validate**.
+        1. Si ok, continua
+        2. Not ok, retorna un 400 con success FALSE
+    3. Se transforma el **bdvRequest** en un  modelo **NotificationBDV**
+        1. Si ok, continua
+        2. Not ok, retorna un 400 con success FALSE
+    4. Se verifica si la notificación existe previamente:
+        1. Si existe, retorna un 200 con código “01” (exigencia de BDV).
+        2. No existe, continua el proceso.
+        3. Si hay un error al acceder a la BD, retorna un 500.
+    5. Se guarda la notificación en la base de datos:
+        1. Si ok, retorna un 201 con código “00” (exigencia de BDV).
+        2. Error al escribir en la base de datos, retorna un 500.
+        3. 
+- **Función:** tranformRequestToModel
+    
+    **PROPOSITO:** tomar el struct de la petición y transformarlo en un struct que corresponda al modelo ***NotificationBDV.***
+    
+    **RETORNA:**
+    
+    1. NotificationBDV
+    2. error
+    
+    **PROCESO:**
+    
+    1. Recepción del **bdvRequest**
+    2. Transforma la fecha recibida en string en un objeto time.Time mediante la funci**ó**n **TransformDate.**
+        1. Si todo ok, continua el proceso.
+        2. Si falla retorna la notificación como **nil** y el error arrojado por la función
+    3. Transforma la hora recibida en string en un objeto time.Time mediante la funci**ó**n **TransformHour.**
+        1. Si todo ok, continua el proceso.
+        2. Si falla retorna la notificación como **nil** y el error arrojado por la función
+    4. Parsing del monto de string a float usando la ParseFloat  de la librería estándar de strconv.
+        1. Si todo ok, continua el proceso.
+        2. Si falla retorna la notificación como **nil** y el error arrojado por la función
+    5. Se evalúa que el monto no sea menor a cero.
+        1. Si todo ok, continua el proceso.
+        2. Si falla retorna la notificación como **nil** y el error arrojado por la función
+    6. Se crea el modelo y se retorna el puntero del mismo, error se retorna como **nil.**
+- **Función:** TransformDate
+    
+    **PROPOSITO:** recibe el string con la fecha y la transforma en un objeto time***.***
+    
+    **RETORNA:**
+    
+    1. Time
+    2. error
+    
+    **PROCESO:**
+    
+    ```go
+    func TransformDate(date string) (*time.Time, error) {
+    	parseDate, err := time.Parse("2006-01-02", date)
+    	if err != nil {
+    		return nil, err
+    	}
+    
+    	return &parseDate, nil
+    }
+    ```
+    
+     
+    
+- **Función:** TransformHour
+    
+    **PROPOSITO:** recibe el string con la hora y la transforma en un objeto time***.***
+    
+    **RETORNA:**
+    
+    1. Time
+    2. error
+    
+    **PROCESO:**
+    
+    ```go
+    func TransformHour(timeStr string) (*time.Time, error) {
+    	// Intentar con diferentes formatos
+    	layouts := []string{"15.04", "15:04", "1504", "15 04"}
+    
+    	for _, layout := range layouts {
+    		t, err := time.Parse(layout, timeStr)
+    		if err == nil {
+    			// Verificar rangos si el parseo fue exitoso
+    			if t.Hour() < 0 || t.Hour() > 23 || t.Minute() < 0 || t.Minute() > 59 {
+    				return nil, fmt.Errorf("hora o minutos fuera de rango")
+    			}
+    			return &t, nil
+    		}
+    	}
+    
+    	return nil, fmt.Errorf("formato de hora inválido, formatos aceptados: HH.MM, HH:MM, HHMM, HH MM")
+    }
+    ```
+    
+     
+    
+- **Función:** saveNotification
+    
+    **PROPOSITO:** recibe el struct con el modelo creado por **tranformRequestToModel** y guarda la entrada en la base de datos.
+    
+    **RETORNA:**
+    
+    1. Booleano.
+    2. error.
+    
+    **PROCESO:**
+    
+    1. Revise que el modelo y el pointer de la BD no sea **nil**.
+    2. Chequea que el modelo se cree exitosamente y que haya filas afectadas.
+    
+    ```go
+    func saveNotification(model *models.NotificationBDV, db *gorm.DB) (bool, error) {
+    	if model == nil {
+    		return false, fmt.Errorf("notification model cannot be nil")
+    	}
+    
+    	if db == nil {
+    		return false, fmt.Errorf("database connection cannot be nil")
+    	}
+    
+    	result := db.Create(model)
+    	if result.Error != nil {
+    		log.Printf("Error saving BDV notification: %v", result.Error)
+    		return false, result.Error
+    	}
+    
+    	if result.RowsAffected == 0 {
+    		log.Println("No rows were affected when saving notification")
+    		return false, fmt.Errorf("no rows affected")
+    	}
+    
+    	return true, nil
+    }
+    
+    ```
+    
+     
+    
+- **Función:** CheckNotificationExists
+    
+    **PROPOSITO:** revisa que la entrada no este duplicada usando los siguiente campos:
+    
+    - banco_origen
+    - referencia_origen
+    - fecha_banco
+    - id_cliente
+    
+    **RETORNA:**
+    
+    1. Booleano.
+    2. error.
+    
+    **PROCESO:**
+    
+    1. Revise que el modelo y el pointer de la BD no sea **nil**.
+    2. Chequea que el modelo se cree exitosamente y que haya filas afectadas.
+    
+    ```go
+    func CheckNotificationExists(bancoOrigen string, referenciaOrigen string, fechaBanco string,
+    	id_cliente string, db *gorm.DB) (bool, error) {
+    
+    	if db == nil {
+    		return false, fmt.Errorf("database connection cannot be nil")
+    	}
+    
+    	var count int64
+    
+    	result := db.Model(&models.NotificationBDV{}).
+    		Where("banco_origen = ? AND referencia_origen = ? AND fecha_banco = ? AND id_cliente = ?",
+    			bancoOrigen, referenciaOrigen, fechaBanco, id_cliente).
+    		Count(&count)
+    
+    	if result.Error != nil {
+    		log.Printf("Error checking for existing BDV notification: %v", result.Error)
+    		return false, result.Error
+    	}
+    
+    	// Si count > 0, significa que ya existe al menos una notificación con esos datos
+    	return count > 0, nil
+    }
+    
+    ```
+    
+     
+    
+- **Función:** Validate
+    
+    **PROPOSITO:** Revisa que los campos de la petición no lleguen vacíos. 
+    
+    **RETORNA:**
+    
+    1. error.
+    
+    **PROCESO:**
+    
+    1. Si alg**ú**n campo se encuentra vac**í**o retorna el error correspondiente, de lo contrario el error se retorna como **nil.**
+    
+    ```go
+    func (r *bdvRequest) Validate() error {
+    	if r.BancoOrdenante == "" {
+    		return fmt.Errorf("bancoOrdenante es obligatorio")
+    	}
+    	if r.Referencia == "" {
+    		return fmt.Errorf("referenciaBancoOrdenante es obligatorio")
+    	}
+    	if r.IdCliente == "" {
+    		return fmt.Errorf("idCliente es obligatorio")
+    	}
+    	if r.IdComercio == "" {
+    		return fmt.Errorf("idComercio es obligatorio")
+    	}
+    	if r.NumeroCliente == "" {
+    		return fmt.Errorf("numeroCliente es obligatorio")
+    	}
+    	if r.NumeroComercio == "" {
+    		return fmt.Errorf("numeroComercio es obligatorio")
+    	}
+    	if r.Fecha == "" {
+    		return fmt.Errorf("fecha es obligatorio")
+    	}
+    	if r.Hora == "" {
+    		return fmt.Errorf("hora es obligatorio")
+    	}
+    	if r.Monto == "" {
+    		return fmt.Errorf("monto es obligatorio")
+    	}
+    	return nil // Todos los campos están correctos
+    }
+    
+    ```
+    
+     
+    
+
+---
+
+---

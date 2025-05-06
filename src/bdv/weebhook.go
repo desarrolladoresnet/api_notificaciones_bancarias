@@ -28,6 +28,7 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request bdvRequest
 
+		// ------- Parsear y verificar el JSON ------ //
 		if err := c.ShouldBindJSON(&request); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
@@ -48,7 +49,8 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		fmt.Println("--- Transformando ---")
+		// ------- Parsear y verificar el JSON ------ //
+		// fmt.Println("--- Transformando ---")
 		model, err := tranformRequestToModel(request)
 		if err != nil {
 			log.Printf("Error while parsing the request body\n%v", err.Error())
@@ -66,9 +68,9 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 		result, err := CheckNotificationExists(request.BancoOrdenante, request.Referencia, request.Fecha, request.IdCliente, db)
 		if err != nil {
 			log.Printf("Error while parsing the request body\n%v", err.Error())
-			c.JSON(http.StatusBadRequest, gin.H{
+			c.JSON(http.StatusInternalServerError, gin.H{
 				"codigo":         nil,
-				"mensajeCliente": "error while receiving JSON data",
+				"mensajeCliente": "error while accesong to the database",
 				"mensajeSistema": err.Error(),
 				"success":        false,
 			})
@@ -85,10 +87,9 @@ func WeebHookBDV(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		// ---- Si no existe la notificacion se guarda en BD ----- //
-
 		result, err = saveNotification(model, db)
 		if err != nil || !result {
-			c.JSON(http.StatusBadRequest, gin.H{
+			c.JSON(http.StatusInternalServerError, gin.H{
 				"codigo":         nil,
 				"mensajeCliente": "error saving the data",
 				"mensajeSistema": err.Error(),
