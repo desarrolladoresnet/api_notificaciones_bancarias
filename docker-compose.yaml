@@ -16,7 +16,9 @@ services:
       - DB_PORT=5432
       - DB_TIMEZONE=America/Caracas
       - DEVELOPMENT=true
-      - AUTOMIGRATE=true
+      - AUTOMIGRATE=false
+      - DEFAULT_USERNAME=netcom
+      - DEFAULT_PASSWORD=123456
     networks:
       - mynetwork
 

@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-type NotificationTesoro struct {
+type NotificacionTesoro struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
 	PaymentType     string    `gorm:"column:payment_type;size:15" json:"payment_type"`
 	Reference       string    `gorm:"column:reference;size:50" json:"reference"`

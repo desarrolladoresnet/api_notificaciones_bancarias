@@ -1,10 +1,12 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/desarrolladoresnet/api_notificaciones_bancarias/src/api_key"
 	"github.com/desarrolladoresnet/api_notificaciones_bancarias/src/models"
 
 	"gorm.io/driver/postgres"
@@ -80,7 +82,7 @@ func Database() (*gorm.DB, error) {
 func AutoMigrateDB(db *gorm.DB) error {
 	log.Println("Eliminando tablas si existen...")
 
-	tablesToDrop := []string{"notificacion_bdv", "api_key", "notificacion_bancaribe"}
+	tablesToDrop := []string{"api_key", "api_user", "notificacion_bdv", "notificacion_bancaribe", "notificacion_tesoro", "user_tesoro"}
 	for _, table := range tablesToDrop {
 		if err := db.Migrator().DropTable(table); err != nil {
 			log.Printf("Error eliminando la tabla %s: %v", table, err)
@@ -91,10 +93,46 @@ func AutoMigrateDB(db *gorm.DB) error {
 
 	log.Println("Iniciando migración de tablas...")
 
-	if err := db.AutoMigrate(&models.NotificationBDV{}, &models.APIKey{}, models.NotificationBancaribe{}); err != nil {
+	if err := db.AutoMigrate(&models.NotificationBDV{}, &models.APIKey{}, models.NotificationBancaribe{}, models.APIUser{}, models.NotificacionTesoro{}); err != nil {
 		return fmt.Errorf("error al migrar las tablas: %w", err)
 	}
 
+	err := createDefaultUser(db)
+	if err != nil {
+		return err
+	}
+
 	log.Println("✅ Migraciones completadas con éxito")
+	return nil
+}
+
+func createDefaultUser(db *gorm.DB) error {
+	fmt.Println("Creating default user...")
+
+	// Obtener las variables de entorno
+	username := os.Getenv("DEFAULT_USERNAME")
+	password := os.Getenv("DEFAULT_PASSWORD")
+
+	if username == "" || password == "" {
+		return errors.New("DEFAULT_USERNAME and/or DEFAULT_PASSWORD environment variables not set")
+	}
+
+	// Verificar si ya existe un usuario con ese username
+	var existingUser models.APIUser
+	result := db.Where("username = ? AND is_active = ?", username, true).First(&existingUser)
+	if result.Error == nil {
+		fmt.Printf("User %s already exists, skipping creation\n", username)
+		return nil
+	} else if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("error checking existing user: %v", result.Error)
+	}
+
+	// Crear el usuario
+	err := api_key.CreateDefaultUser(db, username, password)
+	if err != nil {
+		return fmt.Errorf("failed to create default user: %w", err)
+	}
+
+	log.Printf("✅ Default user %s created successfully\n", username)
 	return nil
 }

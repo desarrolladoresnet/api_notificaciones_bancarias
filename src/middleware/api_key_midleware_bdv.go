@@ -82,3 +82,70 @@ func APIKeyAuthMiddlewareBancaribe(db *gorm.DB) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func APIKeyAuthMiddlewareTesoro(db *gorm.DB) gin.HandlerFunc {
+	// Lista de nombres permitidos
+	allowedNames := map[string]bool{
+		"desarrollo_netcom":     true,
+		"tesoro_notificaciones": true,
+	}
+
+	return func(c *gin.Context) {
+		apiKey := c.GetHeader("X-API-Key")
+		if strings.TrimSpace(apiKey) == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key requerida"})
+			c.Abort()
+			return
+		}
+
+		var key APIKey
+		if err := db.Where("key = ? AND active = ?", apiKey, true).First(&key).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key inválida o inactiva"})
+			c.Abort()
+			return
+		}
+
+		// Verificar si el nombre está en la lista permitida
+		if !allowedNames[key.Name] {
+			c.JSON(http.StatusForbidden, gin.H{"error": "API key no autorizada para este recurso"})
+			c.Abort()
+			return
+		}
+
+		c.Set("api_key_id", key.ID)
+		c.Next()
+	}
+}
+
+func APIKeyAuthMiddlewareApiKey(db *gorm.DB) gin.HandlerFunc {
+	// Lista de nombres permitidos
+	allowedNames := map[string]bool{
+		"desarrollo_netcom": true,
+	}
+
+	return func(c *gin.Context) {
+		apiKey := c.GetHeader("X-API-Key")
+		if strings.TrimSpace(apiKey) == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key requerida"})
+			c.Abort()
+			return
+		}
+
+		var key APIKey
+		if err := db.Where("key = ? AND active = ?", apiKey, true).First(&key).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key inválida o inactiva"})
+			c.Abort()
+			return
+		}
+
+		// Verificar si el nombre está en la lista permitida
+		if !allowedNames[key.Name] {
+			c.JSON(http.StatusForbidden, gin.H{"error": "API key no autorizada para este recurso"})
+			c.Abort()
+			return
+		}
+
+		c.Set("api_key_id", key.ID)
+		c.Next()
+	}
+}
