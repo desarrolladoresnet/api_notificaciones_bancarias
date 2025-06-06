@@ -16,7 +16,7 @@ services:
       - DB_PORT=5432
       - DB_TIMEZONE=America/Caracas
       - DEVELOPMENT=true
-      - AUTOMIGRATE=true
+      - AUTOMIGRATE=false
     networks:
       - mynetwork
 

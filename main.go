@@ -32,7 +32,7 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"}, // ✅ solo tu app de Vite
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-API-Key"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-API-Key", "Apikey"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,

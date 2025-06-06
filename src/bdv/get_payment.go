@@ -154,7 +154,7 @@ func isValidVenezuelanID(id string) bool {
 
 func configurePagination(pageStr string) (int, int) {
 	const defaultPage = 1
-	const defaultPageSize = 100
+	const defaultPageSize = 1000
 
 	page := defaultPage
 	if pageStr != "" {
