@@ -14,14 +14,15 @@ import (
 type notificationBancaribe struct {
 	Amount               float64 `json:"amount"`
 	BankName             string  `json:"bankName"`
-	ClientPhone          string  `json:"clientPhone"`
-	CommercePhone        string  `json:"commercePhone"`
+	ClientPhone          *string `json:"clientPhone"`   // Puntero para manejar null
+	CommercePhone        *string `json:"commercePhone"` // Puntero para manejar null
 	CreditorAccount      string  `json:"creditorAccount"`
 	CurrencyCode         string  `json:"currencyCode"`
 	Date                 string  `json:"date"`
+	DebtorAccount        *string `json:"debtorAccount"` // Nuevo campo
 	DebtorID             string  `json:"debtorID"`
 	DestinyBankReference string  `json:"destinyBankReference"`
-	OriginBankCode       string  `json:"originBankCode"`
+	OriginBankCode       *string `json:"originBankCode"` // Puntero para manejar null
 	OriginBankReference  string  `json:"originBankReference"`
 	PaymentType          string  `json:"paymentType"`
 	Time                 string  `json:"time"`
@@ -167,23 +168,45 @@ func tranformRequestToModel(request notificationBancaribe) (*models.Notification
 		return nil, fmt.Errorf("the amount of the payment can't be negative: %v", request.Amount)
 	}
 
+	// Manejar campos nulos
+	clientPhone := ""
+	if request.ClientPhone != nil {
+		clientPhone = *request.ClientPhone
+	}
+
+	commercePhone := ""
+	if request.CommercePhone != nil {
+		commercePhone = *request.CommercePhone
+	}
+
+	debtorAccount := ""
+	if request.DebtorAccount != nil {
+		debtorAccount = *request.DebtorAccount
+	}
+
+	originBankCode := ""
+	if request.OriginBankCode != nil {
+		originBankCode = *request.OriginBankCode
+	}
+
 	fmt.Println("-> Creando modelo de notificación")
 	notificacion := models.NotificationBancaribe{
-		Amount:               request.Amount,
-		BankName:             request.BankName,
-		ClientPhone:          request.ClientPhone,
-		CommercePhone:        request.CommercePhone,
-		CreditorAccount:      request.CreditorAccount,
-		CurrencyCode:         request.CurrencyCode,
-		DateBancaribe:        request.Date,
-		Date:                 *fecha,
-		DebtorID:             request.DebtorID,
-		DestinyBankReference: request.DestinyBankReference,
-		OriginBankCode:       request.OriginBankCode,
-		OriginBankReference:  request.OriginBankReference,
-		PaymentType:          request.PaymentType,
-		TimeBancaribe:        request.Time,
-		Time:                 *hora,
+		Amount:               &request.Amount,
+		BankName:             &request.BankName,
+		ClientPhone:          &clientPhone,
+		CommercePhone:        &commercePhone,
+		CreditorAccount:      &request.CreditorAccount,
+		CurrencyCode:         &request.CurrencyCode,
+		DateBancaribe:        &request.Date,
+		Date:                 &*fecha,
+		DebtorAccount:        &debtorAccount, // Nuevo campo
+		DebtorID:             &request.DebtorID,
+		DestinyBankReference: &request.DestinyBankReference,
+		OriginBankCode:       &originBankCode,
+		OriginBankReference:  &request.OriginBankReference,
+		PaymentType:          &request.PaymentType,
+		TimeBancaribe:        &request.Time,
+		Time:                 hora,
 	}
 
 	return &notificacion, nil
@@ -208,7 +231,11 @@ func TransformDate(date string) (*time.Time, error) {
 
 func TransformHour(timeStr string) (*time.Time, error) {
 	fmt.Printf("-> Parseando hora: '%s'\n", timeStr)
-	layouts := []string{"15.04", "15:04", "1504", "15 04", "15.04.00", "15:04:00", "150400", "15 04 00"}
+	layouts := []string{
+		"15.04", "15:04", "1504", "15 04",
+		"15.04.00", "15:04:00", "150400", "15 04 00",
+		"15.04.05", "15:04:05", // Nuevos formatos con segundos
+	}
 
 	for _, layout := range layouts {
 		t, err := time.Parse(layout, timeStr)
@@ -221,7 +248,7 @@ func TransformHour(timeStr string) (*time.Time, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("formato de hora inválido, formatos aceptados: HH.MM, HH:MM, HHMM, HH MM")
+	return nil, fmt.Errorf("formato de hora inválido, formatos aceptados: HH.MM, HH:MM, HHMM, HH MM, etc")
 }
 
 //////////////////////////////////////////////////.
@@ -292,37 +319,26 @@ func saveNotification(model *models.NotificationBancaribe, db *gorm.DB) (bool, e
 
 func (n *notificationBancaribe) Validate() error {
 	fmt.Println("-> Validando campos obligatorios...")
-	fields := []struct {
-		value interface{}
-		name  string
-	}{
-		{n.Amount, "amount"},
-		{n.BankName, "bankName"},
-		{n.ClientPhone, "clientPhone"},
-		{n.CommercePhone, "commercePhone"},
-		{n.CreditorAccount, "creditorAccount"},
-		{n.CurrencyCode, "currencyCode"},
-		{n.Date, "date"},
-		{n.DebtorID, "debtorID"},
-		{n.DestinyBankReference, "destinyBankReference"},
-		{n.OriginBankCode, "originBankCode"},
-		{n.OriginBankReference, "originBankReference"},
-		{n.PaymentType, "paymentType"},
-		{n.Time, "time"},
+
+	// Campos siempre requeridos
+	requiredFields := map[string]string{
+		"amount":               fmt.Sprintf("%v", n.Amount),
+		"bankName":             n.BankName,
+		"creditorAccount":      n.CreditorAccount,
+		"currencyCode":         n.CurrencyCode,
+		"date":                 n.Date,
+		"destinyBankReference": n.DestinyBankReference,
+		"originBankReference":  n.OriginBankReference,
+		"paymentType":          n.PaymentType,
+		"time":                 n.Time,
 	}
 
-	for _, field := range fields {
-		switch v := field.value.(type) {
-		case float64:
-			if v == 0 {
-				return fmt.Errorf("%s no puede ser cero", field.name)
-			}
-		case string:
-			if v == "" {
-				return fmt.Errorf("%s es obligatorio", field.name)
-			}
+	for field, value := range requiredFields {
+		if value == "" || value == "0" {
+			return fmt.Errorf("%s es obligatorio", field)
 		}
 	}
+
 	fmt.Println("-> Validación exitosa")
 	return nil
 }
