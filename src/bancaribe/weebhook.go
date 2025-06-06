@@ -29,9 +29,12 @@ type notificationBancaribe struct {
 
 func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		fmt.Println("PASO 1: Inicio de WeebHookBancaribe")
 		var request notificationBancaribe
 
+		fmt.Println("PASO 2: Bind JSON request")
 		if err := c.ShouldBind(&request); err != nil {
+			fmt.Println("! ERROR en bind JSON:", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"message":        "error while receiving JSON data",
@@ -42,7 +45,9 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		fmt.Println("PASO 3: Validar campos obligatorios")
 		if err := request.Validate(); err != nil {
+			fmt.Println("! ERROR en validación:", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"message":        "validation error",
@@ -53,8 +58,10 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		fmt.Println("PASO 4: Transformar request a modelo")
 		model, err := tranformRequestToModel(request)
 		if err != nil {
+			fmt.Println("! ERROR transformando a modelo:", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"message":        "erro transforming to model",
@@ -65,9 +72,10 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// ----- CHECK IF EXIST ----- //
+		fmt.Println("PASO 5: Verificar duplicados en BD")
 		exist, err := CheckNotificationExists(*model, db)
 		if err != nil {
+			fmt.Println("! ERROR verificando existencia:", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"message":        "erro while checking the DB",
@@ -78,6 +86,7 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if exist {
+			fmt.Println("-> Pago duplicado. Registro ya existe en BD")
 			c.JSON(http.StatusOK, gin.H{
 				"codigo":         "01",
 				"message":        "pago previamente recibido",
@@ -88,9 +97,10 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// ----- SAVE DB ----- //
+		fmt.Println("PASO 6: Guardar notificación en BD")
 		result, err := saveNotification(model, db)
 		if err != nil {
+			fmt.Println("! ERROR guardando en BD:", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"message":        "erro while saving data in the DB",
@@ -101,6 +111,7 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if !result { // ALREADY EXIST
+			fmt.Println("! ERROR: No se pudo guardar en BD (result=false)")
 			c.JSON(http.StatusBadRequest, gin.H{
 				"codigo":         nil,
 				"message":        "can't save the data in the DB",
@@ -108,8 +119,13 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 				"success":        false,
 				"statusCode":     http.StatusBadRequest,
 			})
-
+			return
 		}
+
+		fmt.Println("PASO 7: Notificación procesada exitosamente")
+		fmt.Printf(">> ID generado: %v\n", model.ID)
+		fmt.Printf(">> Monto: %v\n", model.Amount)
+		fmt.Printf(">> Referencia: %v\n", model.OriginBankReference)
 
 		c.JSON(http.StatusCreated, gin.H{
 			"codigo":         "00",
@@ -119,9 +135,7 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 			"data":           model,
 			"statusCode":     http.StatusOK,
 		})
-
 	}
-
 }
 
 ////////////////////////////////////////////////
@@ -135,27 +149,25 @@ func WeebHookBancaribe(db *gorm.DB) gin.HandlerFunc {
 ////////////////////////////////////////////////
 
 func tranformRequestToModel(request notificationBancaribe) (*models.NotificationBancaribe, error) {
+	fmt.Println("-> Transformando fecha...")
 	fecha, err := TransformDate(request.Date)
 	if err != nil {
 		fmt.Println("---- Error en Date -----")
 		return nil, err
 	}
 
+	fmt.Println("-> Transformando hora...")
 	hora, err := TransformHour(request.Time)
 	if err != nil {
 		fmt.Println("---- Error en Time -----")
-
 		return nil, err
 	}
 
-	// monto, err := strconv.ParseFloat(request.Monto, 64)
-	// if err != nil {
-	// 	return nil, err
-	// }
 	if request.Amount <= 0.0 {
 		return nil, fmt.Errorf("the amount of the payment can't be negative: %v", request.Amount)
 	}
 
+	fmt.Println("-> Creando modelo de notificación")
 	notificacion := models.NotificationBancaribe{
 		Amount:               request.Amount,
 		BankName:             request.BankName,
@@ -180,32 +192,31 @@ func tranformRequestToModel(request notificationBancaribe) (*models.Notification
 /////////////////////////////////////////////////
 
 func TransformDate(date string) (*time.Time, error) {
-	// Intentar con formato día-mes-año primero
+	fmt.Printf("-> Parseando fecha: '%s'\n", date)
 	parseDate, err := time.Parse("02-01-2006", date)
 	if err != nil {
-		// Si falla, intentar con otro formato si es necesario
 		parseDate, err = time.Parse("2006-01-02", date)
 		if err != nil {
 			return nil, fmt.Errorf("fecha no válida: %v (formatos soportados: 'dd-mm-yyyy' o 'yyyy-mm-dd')", date)
 		}
 	}
-
+	fmt.Printf("-> Fecha parseada: %v\n", parseDate.Format(time.RFC3339))
 	return &parseDate, nil
 }
 
 /////////////////////////////////////////////////
 
 func TransformHour(timeStr string) (*time.Time, error) {
-	// Intentar con diferentes formatos
+	fmt.Printf("-> Parseando hora: '%s'\n", timeStr)
 	layouts := []string{"15.04", "15:04", "1504", "15 04", "15.04.00", "15:04:00", "150400", "15 04 00"}
 
 	for _, layout := range layouts {
 		t, err := time.Parse(layout, timeStr)
 		if err == nil {
-			// Verificar rangos si el parseo fue exitoso
 			if t.Hour() < 0 || t.Hour() > 23 || t.Minute() < 0 || t.Minute() > 59 {
 				return nil, fmt.Errorf("hora o minutos fuera de rango")
 			}
+			fmt.Printf("-> Hora parseada (%s): %v\n", layout, t.Format("15:04:05"))
 			return &t, nil
 		}
 	}
@@ -218,6 +229,9 @@ func TransformHour(timeStr string) (*time.Time, error) {
 //////////////////////////////////////////////////.
 
 func CheckNotificationExists(model models.NotificationBancaribe, db *gorm.DB) (bool, error) {
+	fmt.Println("-> Buscando duplicados en BD...")
+	fmt.Printf(">> Parámetros: OriginBankCode=%s | DestinyBankRef=%s | Date=%v | Amount=%v | OriginBankRef=%s\n",
+		model.OriginBankCode, model.DestinyBankReference, model.Date, model.Amount, model.OriginBankReference)
 
 	if db == nil {
 		return false, fmt.Errorf("database connection cannot be nil")
@@ -235,7 +249,7 @@ func CheckNotificationExists(model models.NotificationBancaribe, db *gorm.DB) (b
 		return false, result.Error
 	}
 
-	// Si count > 0, significa que ya existe al menos una notificación con esos datos
+	fmt.Printf("-> Registros encontrados: %d\n", count)
 	return count > 0, nil
 }
 
@@ -244,7 +258,9 @@ func CheckNotificationExists(model models.NotificationBancaribe, db *gorm.DB) (b
 //////////////////////////////////////////////////.
 
 func saveNotification(model *models.NotificationBancaribe, db *gorm.DB) (bool, error) {
-	fmt.Printf("\n ---%v \n\n", model)
+	fmt.Println("-> Guardando en BD...")
+	fmt.Printf(">> Datos: %+v\n", model)
+
 	if model == nil {
 		return false, fmt.Errorf("notification model cannot be nil")
 	}
@@ -259,6 +275,9 @@ func saveNotification(model *models.NotificationBancaribe, db *gorm.DB) (bool, e
 		return false, result.Error
 	}
 
+	fmt.Printf("-> Filas afectadas: %d\n", result.RowsAffected)
+	fmt.Printf("-> ID generado: %v\n", model.ID)
+
 	if result.RowsAffected == 0 {
 		log.Println("No rows were affected when saving notification")
 		return false, fmt.Errorf("no rows affected")
@@ -272,44 +291,38 @@ func saveNotification(model *models.NotificationBancaribe, db *gorm.DB) (bool, e
 //////////////////////////////////////////////////.
 
 func (n *notificationBancaribe) Validate() error {
-	if n.Amount == 0 {
-		return fmt.Errorf("amount no puede ser cero")
+	fmt.Println("-> Validando campos obligatorios...")
+	fields := []struct {
+		value interface{}
+		name  string
+	}{
+		{n.Amount, "amount"},
+		{n.BankName, "bankName"},
+		{n.ClientPhone, "clientPhone"},
+		{n.CommercePhone, "commercePhone"},
+		{n.CreditorAccount, "creditorAccount"},
+		{n.CurrencyCode, "currencyCode"},
+		{n.Date, "date"},
+		{n.DebtorID, "debtorID"},
+		{n.DestinyBankReference, "destinyBankReference"},
+		{n.OriginBankCode, "originBankCode"},
+		{n.OriginBankReference, "originBankReference"},
+		{n.PaymentType, "paymentType"},
+		{n.Time, "time"},
 	}
-	if n.BankName == "" {
-		return fmt.Errorf("bankName es obligatorio")
+
+	for _, field := range fields {
+		switch v := field.value.(type) {
+		case float64:
+			if v == 0 {
+				return fmt.Errorf("%s no puede ser cero", field.name)
+			}
+		case string:
+			if v == "" {
+				return fmt.Errorf("%s es obligatorio", field.name)
+			}
+		}
 	}
-	if n.ClientPhone == "" {
-		return fmt.Errorf("clientPhone es obligatorio")
-	}
-	if n.CommercePhone == "" {
-		return fmt.Errorf("commercePhone es obligatorio")
-	}
-	if n.CreditorAccount == "" {
-		return fmt.Errorf("creditorAccount es obligatorio")
-	}
-	if n.CurrencyCode == "" {
-		return fmt.Errorf("currencyCode es obligatorio")
-	}
-	if n.Date == "" {
-		return fmt.Errorf("date es obligatorio")
-	}
-	if n.DebtorID == "" {
-		return fmt.Errorf("debtorID es obligatorio")
-	}
-	if n.DestinyBankReference == "" {
-		return fmt.Errorf("destinyBankReference es obligatorio")
-	}
-	if n.OriginBankCode == "" {
-		return fmt.Errorf("originBankCode es obligatorio")
-	}
-	if n.OriginBankReference == "" {
-		return fmt.Errorf("originBankReference es obligatorio")
-	}
-	if n.PaymentType == "" {
-		return fmt.Errorf("paymentType es obligatorio")
-	}
-	if n.Time == "" {
-		return fmt.Errorf("time es obligatorio")
-	}
-	return nil // Todos los campos están correctos
+	fmt.Println("-> Validación exitosa")
+	return nil
 }
