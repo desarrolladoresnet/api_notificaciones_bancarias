@@ -16,7 +16,7 @@ ARG DB_USER
 RUN go build -o main .
 
 # Exponer el puerto en el que la aplicación escucha
-EXPOSE 5555
+EXPOSE 5000
 
 # Comando para ejecutar la aplicación
 CMD ["./main"]
