@@ -1,1 +1,31 @@
 https://sid-validador-consulta-de-transacciones-3scale-apicast-61e25ec.apps.proplakur.banesco.com/financial-account/transactions
+
+{
+	"data": {
+		"ID": 1,
+		"Name": "bancaribe_notificaciones",
+		"Key": "3ef00951bca381f9b943e87bfbfb89610f05535e51e03fffea834e33fe4b324a",
+		"Active": true,
+		"CreatedAt": "2025-06-17T13:33:30.921151974Z",
+		"UpdatedAt": "2025-06-17T13:33:30.921152053Z",
+		"DeletedAt": null
+	},
+	"error": null,
+	"message": "api key creada",
+	"success": true
+}
+
+{
+	"data": {
+		"ID": 2,
+		"Name": "bdv_notificaciones",
+		"Key": "45a998460fb8a97c8dc8c287dd8b71533caedf0c97ae9d8176fcc3f1f78f84f0",
+		"Active": true,
+		"CreatedAt": "2025-06-17T13:53:49.386785811Z",
+		"UpdatedAt": "2025-06-17T13:53:49.386785923Z",
+		"DeletedAt": null
+	},
+	"error": null,
+	"message": "api key creada",
+	"success": true
+}

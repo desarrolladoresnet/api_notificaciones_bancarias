@@ -16,7 +16,7 @@ type bdvRequest struct {
 	BancoOrdenante string `json:"bancoOrdenante"`
 	Referencia     string `json:"referenciaBancoOrdenante"`
 	IdCliente      string `json:"idCliente"`
-	IdComercio     string `json:"idComercion"`
+	IdComercio     string `json:"idComercio"`
 	NumeroCliente  string `json:"numeroCliente"`
 	NumeroComercio string `json:"numeroComercio"`
 	Fecha          string `json:"fecha"`
